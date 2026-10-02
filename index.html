@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
-<meta name="prepline-version" content="3.1.0">
+<meta name="prepline-version" content="3.2.0">
 <title>Prepline: prep list sorter (TEST)</title>
 <script>
 /* ============ LICENSE_CONFIG (edit this block to go live; see monetise/SETUP_STEPS.md) ============
@@ -580,6 +580,7 @@ var LICENSE_CONFIG = {
   #preplistTab .status{font-size:12.5px; color:var(--ink-soft); margin-top:10px; min-height:16px;}
   #preplistTab .status.err{color:var(--prot); font-weight:600;}
   #preplistTab .status.ok{color:var(--veg1); font-weight:600;}
+  #preplistTab .status.warn{color:var(--sauce2); font-weight:700;}
 
   #preplistTab .summary{display:flex; gap:14px; flex-wrap:wrap; margin-bottom:22px;}
   #preplistTab .sumcard {
@@ -883,7 +884,7 @@ var LICENSE_CONFIG = {
     </div>
     <div class="dropzone" id="dropzone">
       <div class="big">Drop an .xlsx preplist, or one or more production tool PDFs, here — or click to browse</div>
-      <div class="small" id="dropzoneHint">Every tab in a workbook is read as one dish. A production tool PDF is read for its raw ingredients — sub-recipes (batter, sauces, purees etc.) are automatically exploded into their own raw ingredients, each tagged with the sub-recipe's cooked yield.</div>
+      <div class="small" id="dropzoneHint">Every tab in a workbook is read as one dish. A production tool PDF is read from each dish's front page only: quantities are as printed there (finished/cooked weights for sub-recipes such as sauces and purees), not raw weights.</div>
       <input type="file" id="fileInput" accept=".xlsx,.xls,.pdf" multiple>
     </div>
     <div class="row no-print" id="appendRow" style="margin-top:10px; display:none; align-items:center;">
@@ -1001,7 +1002,7 @@ var LICENSE_CONFIG = {
   <div id="resultsArea"></div>
 
   <footer class="no-print">
-    <div id="appVersion" style="font-family:'IBM Plex Mono',monospace; font-size:11px; margin-bottom:6px;">Prepline v3.1.0</div>
+    <div id="appVersion" style="font-family:'IBM Plex Mono',monospace; font-size:11px; margin-bottom:6px;">Prepline v3.2.0</div>
     Two ways to use this: <b>One-time sort</b> works exactly like a normal upload-and-go tool — nothing is
     saved anywhere, close the tab and it's gone (print or export first). <b>Recipe database</b> instead saves
     every dish's ingredients and per-pax quantities in this browser, reloading automatically every time you
@@ -1079,7 +1080,7 @@ var LICENSE_CONFIG = {
     <div class="help-num">01</div>
     <div class="help-body">
       <h3>Load a preplist</h3>
-      <p>Drop an .xlsx preplist, or one or more production tool PDFs, into the dropzone. Every tab in a workbook is read as one dish; a PDF is read for its raw ingredients, with sub-recipes automatically broken out.</p>
+      <p>Drop an .xlsx preplist, or one or more production tool PDFs, into the dropzone. Every tab in a workbook is read as one dish; a PDF is read from each dish's front page, so its quantities are finished/cooked weights (check the production tool for raw weights).</p>
       <p class="note">Choose "recipe database" mode if you want to build a reusable library you'll draw on every week, or "one-time sort" for a single preplist you won't reuse. Either way, your work saves automatically to this browser as you go.</p>
     </div>
   </div>
@@ -1111,7 +1112,7 @@ var LICENSE_CONFIG = {
     <div class="help-body">
       <h3>Export to Excel — an editable, re-uploadable copy</h3>
       <p>Each view has its own "📊 Export to Excel" button, laid out to match how you're looking at it — By dish gives one sheet per dish, By team section one sheet per section, By prep day one sheet per day (several dishes can share a sheet when grouped this way). Open it in Excel or Google Sheets to update quantities, sections or prep days as the function changes, then upload that same file back into the tool later and it reads straight back in.</p>
-      <p class="note">By dish uses the same tab names as the workbook you imported (a dish from a PDF or the paste box gets a tab named after the dish); By team section and By prep day name each tab after the section or day. Names are made Excel-safe: at most 31 characters, no [ ] : * ? / \, and no two tabs the same. For the By-dish export specifically, a dish name longer than that comes back under its truncated tab name on re-upload, rather than its full original title — the By-section and By-day exports don't have this limit, since several dishes sharing one tab always keep their full names.</p>
+      <p class="note">By dish uses the original tab names: the workbook's own tab names in the same order, or for a PDF each recipe's title as printed. By team section and By prep day name each tab after the section or day. Every export has a Source tab column with the exact original name of the tab (or PDF recipe) each row came from. Names are made Excel-safe: at most 31 characters, no [ ] : * ? / \, and no two tabs the same; any name Excel forces us to change is listed in the message after the export. For the By-dish export specifically, a dish name longer than that comes back under its truncated tab name on re-upload, rather than its full original title — the By-section and By-day exports don't have this limit, since several dishes sharing one tab always keep their full names.</p>
     </div>
   </div>
 </div>
@@ -1138,7 +1139,7 @@ const SECTION_KEY = {
   'Box off/ Trolley organising team':'box'
 };
 
-const WORDBOUND_KW = new Set(['ragu','oil','roe','pea','crate']);
+const WORDBOUND_KW = new Set(['ragu','oil','roe','pea','crate','butter']); // 'butter' whole-word so "butternut pumpkin" isn't filed as a sauce
 const BOX_OFF_KW = ['breadcrate','logistics team','portioning pre event','sanitise all items','vacuumbag whatever',
   'dolleys for transport','dolley','trolley','box off','crate','wrap and label','dispatch','load out',
   'send to event','pack for event','packing list','coolroom transport'];
@@ -1362,7 +1363,13 @@ function loadOnetimeSession(){
       && typeof r.section==='string' && SECTIONS.includes(r.section);
     if(isObj(s) && Array.isArray(s.ROWS) && s.ROWS.length && s.ROWS.every(rowOk)){
       ROWS = s.ROWS.map(r=>({dish:r.dish, task:r.task, qty:r.qty==null?'':r.qty, unit:r.unit==null?'':r.unit,
-        section:r.section, baseCategory:r.baseCategory||r.section, flagged:!!r.flagged, day:typeof r.day==='string'?r.day:'', stageNum:Number.isFinite(r.stageNum)?r.stageNum:1}));
+        section:r.section, baseCategory:r.baseCategory||r.section, flagged:!!r.flagged, day:typeof r.day==='string'?r.day:'', stageNum:Number.isFinite(r.stageNum)?r.stageNum:1,
+        // v3.2: a PDF row's fixed batch total must survive a reload too, or every PDF total turns into "set pax"
+        ...(Number.isFinite(r.pdfFixedTotal) ? {pdfFixedTotal:r.pdfFixedTotal} : {}),
+        // v3.2: the original tab / PDF title each row came from (used to name Excel export tabs)
+        ...(typeof r.srcSheet==='string' ? {srcSheet:r.srcSheet} : {}),
+        ...(Number.isFinite(r.srcSheetIdx) ? {srcSheetIdx:r.srcSheetIdx} : {}),
+        ...(typeof r.srcType==='string' ? {srcType:r.srcType} : {})}));
       leaderBySection = isObj(s.leaderBySection) ? s.leaderBySection : {};
       SECTIONS.forEach(x=>{ if(typeof leaderBySection[x]!=='string') leaderBySection[x]=''; });
       paxByDish = isObj(s.paxByDish) ? s.paxByDish : {};
@@ -1411,7 +1418,7 @@ function commitRowsToDatabase(){
     const items = ROWS.filter(r=>r.dish===dish).map(r=>({
       task:r.task, qty:r.qty, unit:r.unit, section:r.section,
       baseCategory:r.baseCategory, flagged:r.flagged, stageNum:r.stageNum,
-      pdfFixedTotal:r.pdfFixedTotal, srcSheet:r.srcSheet, srcSheetIdx:r.srcSheetIdx
+      pdfFixedTotal:r.pdfFixedTotal, srcSheet:r.srcSheet, srcSheetIdx:r.srcSheetIdx, srcType:r.srcType
     }));
     dishDatabase[dish] = {items};
     if (weeklySelection[dish]===undefined) weeklySelection[dish] = {include:true, pax:'', date:''};
@@ -1490,7 +1497,7 @@ function generateWeekly(){
       const day = eventDay ? calendarDayForPrepNum(eventDay, it.stageNum) : '';
       ROWS.push({dish, task:it.task, qty:it.qty, unit:it.unit, section:it.section,
         baseCategory:it.baseCategory, flagged:it.flagged, day, stageNum:it.stageNum,
-        pdfFixedTotal:it.pdfFixedTotal, srcSheet:it.srcSheet, srcSheetIdx:it.srcSheetIdx});
+        pdfFixedTotal:it.pdfFixedTotal, srcSheet:it.srcSheet, srcSheetIdx:it.srcSheetIdx, srcType:it.srcType});
     });
   });
   if (includedCount===0){ setWeeklyStatus('Tick at least one dish to generate this week\'s preplist.', 'err'); return; }
@@ -2053,6 +2060,27 @@ function computeTotal(r){
   const t = q * pax;
   return Math.round(t*100)/100;
 }
+// Totals of 1000 g or more display as kg (and 1000 ml+ as L): "10 kg", never "10000 g".
+const G_UNITS = new Set(['g','gm','gms','gram','grams']), KG_UNITS = new Set(['kg','kgs','kilo','kilos','kilogram','kilograms']);
+const ML_UNITS = new Set(['ml','millilitre','millilitres','milliliter','milliliters']), L_UNITS = new Set(['l','lt','ltr','litre','litres','liter','liters']);
+function toBaseQty(n, unit){
+  const u = String(unit||'').toLowerCase().trim();
+  if (n===null || n===undefined || isNaN(n)) return {n, u:unit||'', key:u};
+  if (G_UNITS.has(u)) return {n, u:'g', key:'g'};
+  if (KG_UNITS.has(u)) return {n:n*1000, u:'g', key:'g'};
+  if (ML_UNITS.has(u)) return {n, u:'ml', key:'ml'};
+  if (L_UNITS.has(u)) return {n:n*1000, u:'ml', key:'ml'};
+  return {n, u:unit||'', key:u};
+}
+function dispQty(n, unit){
+  if (n===null || n===undefined || isNaN(n)) return {n, u:unit||''};
+  const b = toBaseQty(n, unit);
+  if (b.key==='g') return Math.abs(b.n)>=1000 ? {n:Math.round(b.n)/1000, u:'kg'} : {n:Math.round(b.n*100)/100, u:'g'};
+  if (b.key==='ml') return Math.abs(b.n)>=1000 ? {n:Math.round(b.n)/1000, u:'L'} : {n:Math.round(b.n*100)/100, u:'ml'};
+  return {n, u:unit||''};
+}
+function qN(n, unit){ return fmtNum(dispQty(n, unit).n); }
+function qU(n, unit){ return String(dispQty(n, unit).u||''); }
 function fmtNum(n){
   if (n===null || n===undefined) return '—';
   if (Number.isInteger(n)) return String(n);
@@ -2089,7 +2117,8 @@ function addRows(dish, items){
     lastCore = core || lastCore;
     // A Prep day column in the file wins over auto-calculation too, for the same reason.
     const day = (typeof it.day==='string' && it.day) ? it.day : (eventDay ? calendarDayForPrepNum(eventDay, stageNum) : '');
-    ROWS.push({dish, task: taskText, qty: it.qty||'', unit: it.unit||'', section: cat, baseCategory: cat, flagged, day, stageNum});
+    ROWS.push({dish, task: taskText, qty: it.qty||'', unit: it.unit||'', section: cat, baseCategory: cat, flagged, day, stageNum,
+      ...(typeof it.srcSheet==='string' ? {srcSheet: it.srcSheet} : {})});
   }
 }
 
@@ -2116,13 +2145,14 @@ const QTY_HEADERS  = new Set(['qty','quantity','amount','qty needed','quantity n
 const UNIT_HEADERS = new Set(['unit','units','uom','unit of measure','measure']);
 const DAY_HEADERS  = new Set(['prep day','day','prepday']);
 const SECTION_HEADERS = new Set(['section','category','team']);
+const SOURCE_HEADERS = new Set(['source tab']);   // v3.2: written by this tool's own Excel export
 function extractAllBlocks(aoa){
   const nRows = aoa.length;
   const claimedRects = []; // {r1,r2,c1,c2}
   const blocks = [];
   const isClaimed = (r,c) => claimedRects.some(x => r>=x.r1 && r<=x.r2 && c>=x.c1 && c<=x.c2);
 
-  function readItemsDownward(itemCol, qtyCol, unitCol, startRow, dayCol, sectionCol){
+  function readItemsDownward(itemCol, qtyCol, unitCol, startRow, dayCol, sectionCol, sourceCol){
     const items = [];
     let blank = 0, endRow = startRow;
     for (let r=startRow; r<nRows; r++){
@@ -2133,6 +2163,7 @@ function extractAllBlocks(aoa){
       const entry = {item:String(item), qty:row[qtyCol], unit:row[unitCol]};
       if (dayCol!=null && !isBlankCell(row[dayCol])) entry.day = String(row[dayCol]).trim();
       if (sectionCol!=null && !isBlankCell(row[sectionCol])) entry.section = String(row[sectionCol]).trim();
+      if (sourceCol!=null && !isBlankCell(row[sourceCol])) entry.srcSheet = String(row[sourceCol]);   // exact, not trimmed
       items.push(entry);
     }
     return {items, endRow};
@@ -2172,8 +2203,8 @@ function extractAllBlocks(aoa){
         if (qf>=0 && !QTY_HEADERS.has(hdr[c+1]||'')) qtyCol = qf;
         if (uf>=0 && !UNIT_HEADERS.has(hdr[c+2]||'')) unitCol = uf;
         else if (qf>=0 && uf<0) unitCol = qtyCol+1;
-        const dayCol = near(DAY_HEADERS), sectionColFound = near(SECTION_HEADERS);
-        const {items, endRow} = readItemsDownward(itemCol, qtyCol, unitCol, r+1, dayCol>=0?dayCol:null, sectionColFound>=0?sectionColFound:null);
+        const dayCol = near(DAY_HEADERS), sectionColFound = near(SECTION_HEADERS), sourceColFound = near(SOURCE_HEADERS);
+        const {items, endRow} = readItemsDownward(itemCol, qtyCol, unitCol, r+1, dayCol>=0?dayCol:null, sectionColFound>=0?sectionColFound:null, sourceColFound>=0?sourceColFound:null);
         if (items.length===0) continue; // false hit — keep scanning the rest of the row
         const title = findTitleNear(r, itemCol, 4);
         let pax = null;
@@ -2299,7 +2330,10 @@ function processWorkbook(wbObj){
         // v3.1: remember the workbook tab each row came from, so every Excel export can
         // name its tabs after the imported file's own tabs (see exportDishesToXlsx).
         const srcIdx = wbObj.SheetNames.indexOf(name);
-        for (let i=rowsBefore; i<ROWS.length; i++){ ROWS[i].srcSheet = name; ROWS[i].srcSheetIdx = srcIdx; }
+        for (let i=rowsBefore; i<ROWS.length; i++){
+          ROWS[i].srcType = 'xlsx';
+          if (typeof ROWS[i].srcSheet!=='string'){ ROWS[i].srcSheet = name; ROWS[i].srcSheetIdx = srcIdx; }   // a Source tab column (re-upload) wins
+        }
       });
     } catch(err){
       errored.push(name + ' (' + err.message + ')');
@@ -2443,6 +2477,7 @@ async function pdfExtractPageItems(page){
       x0: it.transform[4],
       top: viewport.height - it.transform[5],
       size: Math.abs(it.transform[0]) || Math.abs(it.transform[3]) || 8,
+      width: Math.abs(it.width) || 0,
     });
   }
   return items;
@@ -2479,6 +2514,37 @@ function pdfGroupByTop(items, tol){
   lines.sort((a,b)=>a.top-b.top);
   return lines;
 }
+// pdf.js sometimes merges the quantity and the ingredient name into ONE text item when
+// they sit close together (e.g. "2.5 Kilograms Chicken thigh" starting in the quantity
+// column). Columns are assigned by where an item STARTS, so without this the whole string
+// became the quantity and the name was left empty. These split such an item back into its
+// quantity part and name part — also the reverse order ("Chicken thigh 2.5 Kilograms").
+const PDF_QTY_UNIT_RE_SRC = '(?:kilograms?|kgs?|grams?|gms?|g|litres?|liters?|l|millilitres?|milliliters?|ml|each|ea|bunch(?:es)?|punnets?|trays?|pcs?|pieces?|portions?|packs?|packets?|bags?|boxes|box|bottles?|cans?|tins?|dozen|heads?|cloves?|sprigs?|sheets?|slices?|cups?|tbsp|tsp)';
+const PDF_QTY_PART_SRC = '\\d[\\d.,]*\\s*\\*?' + PDF_QTY_UNIT_RE_SRC + '\\.?';
+const PDF_QTY_SEQ_SRC = PDF_QTY_PART_SRC + '(?:\\s*\\+?\\s*' + PDF_QTY_PART_SRC + ')*';
+const PDF_LEADING_QTY_RE = new RegExp('^(' + PDF_QTY_SEQ_SRC + ')(?:\\s+|(?=[^\\w\\s]))(.*\\S)$', 'i');
+const PDF_TRAILING_QTY_RE = new RegExp('^(.*?[A-Za-z].*?)\\s+(' + PDF_QTY_SEQ_SRC + ')$', 'i');
+function pdfSplitQtyName(t){
+  let m = t.match(PDF_LEADING_QTY_RE);
+  if (m && /[A-Za-z]/.test(m[2])) return {qty:m[1].trim(), name:m[2].trim()};
+  m = t.match(PDF_TRAILING_QTY_RE);
+  if (m && !/^\d/.test(m[1].trim())) return {name:m[1].trim(), qty:m[2].trim()};
+  return null;
+}
+// Fallback for a merged item whose unit isn't in the list above: if the item's own width
+// carries it across the quantity/name column boundary, estimate (proportionally, per
+// character) where the boundary falls in the string and split at the nearest space.
+function pdfSplitByWidth(w, t, boundaryX){
+  if (!w.width || !/^\d/.test(t) || w.x0 + w.width <= boundaryX + 2) return null;
+  const cut = Math.round(t.length * (boundaryX - w.x0) / w.width);
+  let best = -1;
+  for (let i=0; i<t.length; i++){
+    if (t[i]===' ' && i>0 && (best<0 || Math.abs(i-cut) < Math.abs(best-cut))) best = i;
+  }
+  if (best<0) return null;
+  const qty = t.slice(0,best).trim(), name = t.slice(best+1).trim();
+  return (qty && name && /[A-Za-z]/.test(name)) ? {qty, name} : null;
+}
 function pdfExtractIngredientRows(items){
   const ingLabel = items.find(w=>pdfSquash(w.str)==='ingredients:');
   if (!ingLabel) return [];
@@ -2498,6 +2564,22 @@ function pdfExtractIngredientRows(items){
       else if (w.x0<300){ qty.push(t); }
       else { name.push(t); }
     }
+    // One column came out empty — check for a quantity and a name merged into one item.
+    if (!name.length && qty.length){
+      for (const w of line.items){
+        const t = w.str.trim();
+        if (!t || w.x0>=300 || t==='+') continue;
+        const sp = pdfSplitQtyName(t) || pdfSplitByWidth(w, t, 300);
+        if (sp){ qty.splice(qty.indexOf(t), 1, sp.qty); name.push(sp.name); break; }
+      }
+    } else if (!qty.length && name.length){
+      for (const w of line.items){
+        const t = w.str.trim();
+        if (!t || w.x0<300 || w.x0>=430) continue;
+        const sp = pdfSplitQtyName(t);
+        if (sp){ name.splice(name.indexOf(t), 1, sp.name); qty.push(sp.qty); break; }
+      }
+    }
     if (qty.length||name.length||cost.length) parsedLines.push({qty,name,cost});
   }
   const rows = [];
@@ -2511,7 +2593,8 @@ function pdfExtractIngredientRows(items){
     const qtyStr = r.map(pl=>pl.qty.join(' ')).join(' ').trim().replace(/\s+/g,' ');
     const nameStr = r.map(pl=>pl.name.join(' ')).join(' ').trim().replace(/\s+/g,' ');
     const cost = r.map(pl=>pl.cost[0]).find(Boolean) || null;
-    return {qtyRaw:qtyStr, name:nameStr, cost};
+    const raw = [qtyStr, nameStr, cost].filter(Boolean).join(' ');
+    return {qtyRaw:qtyStr, name:nameStr, cost, raw};
   });
 }
 function pdfParseQtyString(qtyStr){
@@ -2521,12 +2604,13 @@ function pdfParseQtyString(qtyStr){
     if (m) return {each:parseFloat(m[1]), grams:null, unitLabel:'each'};
   }
   const re = /([\d.]+)\s*(Kilograms|Kilogram|Grams|Gram|Liters|Liter|Litres|Litre|Milliliters|Milliliter)/gi;
-  let m, totalG=0, found=false;
+  let m, totalG=0, found=false, allVolume=true;
   while ((m = re.exec(qtyStr))){
     const mult = PDF_UNIT_TO_GRAMS[m[2].toLowerCase()];
-    if (mult){ totalG += parseFloat(m[1])*mult; found=true; }
+    if (mult){ totalG += parseFloat(m[1])*mult; found=true; if (!/^(lit|lite|mil)/i.test(m[2])) allVolume=false; }
   }
-  if (found) return {each:null, grams:totalG, unitLabel:null};
+  // Litres/millilitres stay a volume (shown as L/ml), rather than being displayed as kg/g.
+  if (found) return {each:null, grams:totalG, unitLabel:null, volume:allVolume};
   // Fallback: an unrecognized count-style unit (Punnet, Tray, Bunch, etc.) is still a
   // real countable quantity — keep the number and its own word as the unit label
   // rather than reporting it as unparsed.
@@ -2647,7 +2731,10 @@ function pdfParseAllPages(pagesItems){
 // list is what caused the confusion this was built to avoid. Every quantity on the front
 // page is therefore already a "cooked"/finished weight (the sub-recipe's own output, or a
 // ready-to-use purchased ingredient) rather than a raw input — see the on-page disclaimer.
+// A row with no usable name can't be listed — but it's never dropped silently: it's
+// recorded on dish.skipped and reported in the status message.
 function pdfExplodeDish(dish){
+  dish.skipped = dish.main.ingredients.filter(i=>!i.name).map(i=>i.raw || i.qtyRaw || '(blank row)');
   return dish.main.ingredients.filter(i=>i.name).map(ing=>({
     name: ing.name, qtyRaw: ing.qtyRaw, parsedQty: ing.parsedQty, note: null,
   }));
@@ -2663,8 +2750,8 @@ function pdfCookedBannerHtml(rows){
 }
 function pdfQtyToDisplay(parsedQty){
   if (parsedQty.grams!==null && parsedQty.grams!==undefined){
-    if (parsedQty.grams>=1000) return {value: pdfRoundTo(parsedQty.grams/1000,2), unit:'kg'};
-    return {value: pdfRoundTo(parsedQty.grams,1), unit:'g'};
+    if (parsedQty.grams>=1000) return {value: pdfRoundTo(parsedQty.grams/1000,2), unit: parsedQty.volume ? 'L' : 'kg'};
+    return {value: pdfRoundTo(parsedQty.grams,1), unit: parsedQty.volume ? 'ml' : 'g'};
   }
   if (parsedQty.each!==null && parsedQty.each!==undefined) return {value:parsedQty.each, unit: parsedQty.unitLabel || 'each'};
   return {value:null, unit:''};
@@ -2677,10 +2764,11 @@ function pdfQtyToDisplay(parsedQty){
 // the dish's own BAT/batch date) drives the same day-scheduling as the xlsx pipeline.
 function addPdfRows(dish, tasks, eventDay){
   let lastCat = null, lastCore = null;
+  const skipped = [];
   for (const t of tasks){
     const cleanName = t.name.replace(/\s+/g,' ').trim();
     let cat = categorize(cleanName, dish);
-    if (cat === null) continue;
+    if (cat === null){ skipped.push(cleanName); continue; }
     // categorize() couldn't confidently place this one — it's not being silently
     // guessed: it's flagged (the same orange "check" tag the xlsx pipeline uses) so
     // whoever's reading the printed list knows to double-check that one themselves,
@@ -2702,6 +2790,7 @@ function addPdfRows(dish, tasks, eventDay){
       flagged, day, stageNum, pdfFixedTotal: disp.value,
     });
   }
+  return skipped;
 }
 // The pdf.js library now loads as an ES module (see <head>), which fetches and executes
 // asynchronously — unlike a classic script tag, there's no guarantee window.pdfjsLib is
@@ -2734,6 +2823,7 @@ async function handlePdfFiles(fileList, opts){
   }
   let totalTasks = 0;
   const dishNames = [];
+  const skippedRows = [];   // raw text of every PDF row that couldn't be listed
   const usedDishTitles = new Set(); // disambiguates the SAME dish uploaded twice at different
                                      // scales/dates (e.g. two production-tool exports for the
                                      // same recipe on different days) — each run is a distinct
@@ -2756,6 +2846,7 @@ async function handlePdfFiles(fileList, opts){
       const {dishes} = pdfParseAllPages(pagesItems);
       dishes.forEach(d=>{
         const tasks = pdfExplodeDish(d);
+        (d.skipped||[]).forEach(raw=>skippedRows.push(raw));
         if (!tasks.length) return;
         let dishTitle = d.main.title;
         if (usedDishTitles.has(dishTitle)){
@@ -2766,7 +2857,11 @@ async function handlePdfFiles(fileList, opts){
         const eventDay = d.main.batDate ? pdfBatDateToWeekday(d.main.batDate) : null;
         if (eventDay) eventDayOverride[dishTitle] = eventDay;
         if (d.main.batDate) eventDateByDish[dishTitle] = d.main.batDate;
-        addPdfRows(dishTitle, tasks, eventDay);
+        const pdfRowsBefore = ROWS.length;
+        addPdfRows(dishTitle, tasks, eventDay).forEach(raw=>skippedRows.push(raw));
+        // v3.2: a PDF's closest thing to a tab name is the recipe title as printed on its
+        // front page (before any "— for <date>" de-duplication suffix added to the dish key).
+        for (let i=pdfRowsBefore; i<ROWS.length; i++){ ROWS[i].srcSheet = d.main.title; ROWS[i].srcType = 'pdf'; }
         totalTasks += tasks.length;
         dishNames.push(cleanDishName(dishTitle));
         // The Yield line's *Each figure is this batch's actual covers/pax count (confirmed
@@ -2802,9 +2897,13 @@ async function handlePdfFiles(fileList, opts){
     const loadedName = fileList.length===1 ? fileList[0].name : fileList.length+' production tool PDFs';
     const tagName = (opts.append && prevSource) ? prevSource+' + '+loadedName : loadedName;
     document.getElementById('fileTag').textContent = tagName;
+    const skipTxt = s=>(s.length>80 ? s.slice(0,77)+'…' : s);
+    const skipWarn = skippedRows.length
+      ? '⚠ '+skippedRows.length+' row'+(skippedRows.length>1?'s':'')+' skipped: check the PDF — '+skippedRows.slice(0,5).map(s=>'"'+skipTxt(s)+'"').join(', ')+(skippedRows.length>5?' and '+(skippedRows.length-5)+' more':'')+'. '
+      : '';
     if (totalTasks===0){
       ({ROWS, paxByDish, eventDayOverride, eventDateByDish, originalPageImages, methodCrops} = prevPdf);
-      setStatus('Could not find any ingredient rows in that PDF. PDF import reads production tool exports (a page per recipe with an "Ingredients:" table); for other layouts, upload the spreadsheet version or use the paste box. Your previous list has been kept.', 'err');
+      setStatus(skipWarn+'Could not find any ingredient rows in that PDF. PDF import reads production tool exports (a page per recipe with an "Ingredients:" table); for other layouts, upload the spreadsheet version or use the paste box. Your previous list has been kept.', 'err');
       return;
     }
     const dishesWithSnaps = new Set(pdfSnapshots.map(s=>s.dishTitle));
@@ -2813,15 +2912,15 @@ async function handlePdfFiles(fileList, opts){
       (dishesGotAnyImg===dishesWithSnaps.size ? ' Original page images: available for all '+dishesGotAnyImg+' dish(es).'
         : dishesGotAnyImg===0 ? ' Original page images: none could be captured this time (open your browser console for details) — the sorted list above is unaffected.'
         : ' Original page images: available for '+dishesGotAnyImg+' of '+dishesWithSnaps.size+' dish(es).');
-    const noteMsg = ' Raw ingredient weights only, with each sub-recipe\'s cooked yield noted alongside it — check the task text on each row.'+imgMsg;
+    const noteMsg = ' Quantities are as printed on each dish\'s front page, i.e. COOKED/finished weights for sub-recipes: refer to the production tool for raw weights.'+imgMsg;
     if (toolMode==='onetime'){
       sourceInfo = {name: tagName, loadedAt: new Date()};
-      setStatus((opts.append?'Appended ':'Sorted ')+totalTasks+' raw ingredients from '+dishNames.length+' dish(es): '+dishNames.join(', ')+'.'+(opts.append?' The list now has '+ROWS.length+' items.':'')+noteMsg, 'ok');
+      setStatus(skipWarn+(opts.append?'Appended ':'Sorted ')+totalTasks+' items from '+dishNames.length+' dish(es): '+dishNames.join(', ')+'.'+(opts.append?' The list now has '+ROWS.length+' items.':'')+noteMsg, skipWarn?'warn':'ok');
       renderApp();
       return;
     }
     const added = commitRowsToDatabase();
-    setStatus('Added '+added+' dish(es) to your recipe database from PDF ('+totalTasks+' tasks): '+dishNames.join(', ')+'.'+noteMsg, 'ok');
+    setStatus(skipWarn+'Added '+added+' dish(es) to your recipe database from PDF ('+totalTasks+' tasks): '+dishNames.join(', ')+'.'+noteMsg, skipWarn?'warn':'ok');
     appMode = 'weekly';
     renderApp();
   } catch(err){
@@ -2907,6 +3006,7 @@ document.getElementById('parsePasteBtn').addEventListener('click', ()=>{
     else items.push({item: parts[0], qty:'', unit:''});
   });
   addRows('Pasted list', items);
+  ROWS.forEach(r=>{ r.srcSheet = 'Pasted list'; r.srcType = 'paste'; });
   if (ROWS.length===0){
     ({ROWS, paxByDish, eventDateByDish} = prevPaste);
     setStatus('Nothing usable in the pasted text. Paste rows copied from a spreadsheet: item, quantity, unit.', 'err');
@@ -3279,15 +3379,27 @@ async function printAllOfView(targetView, filename){
 // Excel sheet names: max 31 chars, and \ / ? * [ ] are never allowed. Used for every
 // export below so a tab is always named after something real — the dish, the section,
 // or the day it actually represents — never a generic placeholder.
-// v3.1: also strips leading/trailing apostrophes, avoids the reserved name "History",
-// and checks uniqueness case-insensitively (Excel treats "Mains" and "MAINS" as the same tab).
-function safeSheetName(raw, usedNames){
-  let base = (raw||'Sheet').toString().replace(/[\\/?*[\]:]/g, '-').replace(/[\u0000-\u001f]/g, ' ').trim()
-    .replace(/^'+|'+$/g, '').trim().slice(0,31).trim() || 'Sheet';
-  if (base.toLowerCase()==='history') base = 'History-1';
+// v3.2: changes a name ONLY where Excel forces it, and reports every change: the 7
+// characters Excel bans (\ / ? * [ ] :) become "-", a leading/trailing apostrophe is
+// dropped, names are cut to 31 characters, "History" is reserved, a blank name becomes
+// "Sheet", and a name Excel would see as a duplicate (it ignores capitals) gets "-2", "-3"...
+// Spaces, capitals and every other character are kept exactly.
+function safeSheetName(raw, usedNames, changes){
+  const orig = (raw===undefined || raw===null) ? '' : String(raw);
+  const why = [];
+  let base = orig.replace(/[\\/?*[\]:]/g, '-');
+  if (base!==orig) why.push('Excel does not allow \\ / ? * [ ] : in tab names');
+  const noApos = base.replace(/^'+|'+$/g, '');
+  if (noApos!==base){ why.push('Excel does not allow an apostrophe at the start or end'); base = noApos; }
+  const cut31 = s => { let t = s.slice(0,31); if (/[\ud800-\udbff]$/.test(t)) t = t.slice(0,-1); return t; };
+  if (base.length>31){ why.push('Excel tab names are at most 31 characters'); base = cut31(base); }
+  if (base.trim()===''){ why.push('Excel tab names cannot be blank'); base = 'Sheet'; }
+  if (base.toLowerCase()==='history'){ why.push('"History" is reserved by Excel'); base = 'History-1'; }
   let finalName = base, n = 2;
-  while (usedNames.has(finalName.toLowerCase())){ const suf = '-'+n; finalName = base.slice(0, 31-suf.length)+suf; n++; }
+  while (usedNames.has(finalName.toLowerCase())){ const suf = '-'+n; finalName = cut31(base.slice(0, 31-suf.length))+suf; n++; }
+  if (finalName!==base) why.push('Excel treats tab names that differ only in capitals as the same tab');
   usedNames.add(finalName.toLowerCase());
+  if (changes && finalName!==orig) changes.push({from: orig, to: finalName, why});
   return finalName;
 }
 // Builds one dish's block within a sheet — its own title row, a PAX row if set, the
@@ -3303,7 +3415,7 @@ function appendDishBlock(aoa, formulaCells, dish, rows){
   aoa.push([fromSheet ? dish : (cleanDishName(dish) || dish)]);
   let paxRowIdx = -1;
   if (pax!==undefined && pax!==null && pax!==''){ aoa.push(['PAX', Number(pax)]); paxRowIdx = aoa.length-1; }
-  aoa.push(['Item','Qty (per pax)','Unit','Total needed','Section','Prep day']);
+  aoa.push(['Item','Qty (per pax)','Unit','Total needed','Section','Prep day','Source tab']);
   const dataStartRow = aoa.length;
   rows.forEach((r, ri)=>{
     const qtyNum = (r.qty!==undefined && r.qty!==null && r.qty!=='' && !isNaN(parseFloat(r.qty))) ? parseFloat(r.qty) : (r.qty ?? '');
@@ -3321,7 +3433,7 @@ function appendDishBlock(aoa, formulaCells, dish, rows){
       const paxRef = '$B$'+(paxRowIdx+1);
       formulaCells.push({addr, formula: qtyRef+'*'+paxRef, preview: Math.round(qtyNum*Number(pax)*100)/100});
     }
-    aoa.push([r.task, qtyNum, r.unit || '', totalCell, r.section || '', r.day || '']);
+    aoa.push([r.task, qtyNum, r.unit || '', totalCell, r.section || '', r.day || '', srcName(r)]);   // v3.2: exact original tab / PDF title
   });
   // The app's own importer tolerates up to 6 blank rows in a row before it decides a
   // dish's block has ended — a single blank row isn't enough of a gap, so without this it
@@ -3332,6 +3444,7 @@ function appendDishBlock(aoa, formulaCells, dish, rows){
 // Shared engine behind all three "Export to Excel" buttons — By dish, By section, and By
 // prep day each just group the ticked rows differently before handing them to this.
 // groupFn(row) returns the group a row belongs to; tabNameFn(groupKey) names its sheet.
+let lastExportNameChanges = [];   // v3.2: the tab-name changes made by the most recent export (also shown in the status message)
 function exportGroupedToXlsx(groupFn, tabNameFn, filenamePrefix, emptyMsg, sortFn){
   if (typeof XLSX === 'undefined' || !XLSX.utils || typeof XLSX.writeFile !== 'function'){
     setStatus('The spreadsheet export could not load. This tool needs an internet connection when it opens — connect, reload the page, and try again.', 'err');
@@ -3355,6 +3468,7 @@ function exportGroupedToXlsx(groupFn, tabNameFn, filenamePrefix, emptyMsg, sortF
   if (sortFn) groupOrder.sort(sortFn);
   const wb = XLSX.utils.book_new();
   const usedNames = new Set();
+  const nameChanges = [];
   groupOrder.forEach(key=>{
     const rowsInGroup = groupRows[key];
     const aoa = []; const formulaCells = [];
@@ -3365,24 +3479,32 @@ function exportGroupedToXlsx(groupFn, tabNameFn, filenamePrefix, emptyMsg, sortF
     });
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     formulaCells.forEach(fc=>{ ws[fc.addr] = {t:'n', f: fc.formula, v: fc.preview}; });
-    XLSX.utils.book_append_sheet(wb, ws, safeSheetName(tabNameFn(key), usedNames));
+    ws['!cols'] = [{wch:38},{wch:12},{wch:8},{wch:13},{wch:24},{wch:12},{wch:34}];
+    XLSX.utils.book_append_sheet(wb, ws, safeSheetName(tabNameFn(key), usedNames, nameChanges));
   });
   const stamp = new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb, filenamePrefix+'_'+stamp+'.xlsx');
-  setStatus('Exported '+groupOrder.length+' tab(s) to Excel, with Total needed included — edit it in Excel or Google Sheets, then re-upload that same file here later to update the preplist.', 'ok');
+  lastExportNameChanges = nameChanges;
+  const renameNote = nameChanges.length ? '⚠ '+nameChanges.length+' tab name'+(nameChanges.length>1?'s':'')+' changed because Excel requires it: '
+    + nameChanges.map(c=>'"'+c.from+'" → "'+c.to+'" ('+c.why.join('; ')+')').join(', ')
+    + '. The exact original name is kept in each row\'s Source tab column. ' : '';
+  setStatus(renameNote+'Exported '+groupOrder.length+' tab(s) to Excel, with Total needed included — edit it in Excel or Google Sheets, then re-upload that same file here later to update the preplist.', nameChanges.length?'warn':'ok');
 }
 // By dish — one sheet per dish, tab named after that dish (not a generic placeholder).
-// v3.1: a dish imported from a workbook goes back into a tab with that workbook's own tab
-// name (several dishes that shared one source tab share it again, in the same order);
-// a dish from a PDF or the paste box has no source tab, so it keeps the dish-name tab.
+// By dish: one tab per original source tab (several dishes that shared one source tab share
+// it again), in the source workbook's own tab order where known.
+// v3.2: one rule for every source: the tab is the row's original source name (srcName):
+// a workbook's own tab name, or a PDF recipe's title as printed. Older saved rows with no
+// recorded source fall back to the dish name as it was imported.
+function srcName(r){ return (typeof r.srcSheet==='string' && r.srcSheet!=='') ? r.srcSheet : r.dish; }
 function exportDishesToXlsx(){
   const firstSeen = {};
-  activeRows().forEach((r,i)=>{ const k = r.srcSheet ? 'tab:'+r.srcSheet : 'dish:'+r.dish; if (firstSeen[k]===undefined) firstSeen[k] = i; });
+  activeRows().forEach((r,i)=>{ const k = srcName(r); if (firstSeen[k]===undefined) firstSeen[k] = i; });
   const idxOf = {};
-  activeRows().forEach(r=>{ if (r.srcSheet && idxOf['tab:'+r.srcSheet]===undefined) idxOf['tab:'+r.srcSheet] = (typeof r.srcSheetIdx==='number' && r.srcSheetIdx>=0) ? r.srcSheetIdx : 9999; });
+  activeRows().forEach(r=>{ const k = srcName(r); if (idxOf[k]===undefined && r.srcType==='xlsx' && Number.isFinite(r.srcSheetIdx) && r.srcSheetIdx>=0) idxOf[k] = r.srcSheetIdx; });
   exportGroupedToXlsx(
-    r => r.srcSheet ? 'tab:'+r.srcSheet : 'dish:'+r.dish,
-    key => key.startsWith('tab:') ? key.slice(4) : dishKeyword(key.slice(5)),
+    r => srcName(r),
+    key => key,
     'Preplist_By_Dish',
     'Nothing to export yet — load a preplist first.',
     (a,b) => ((idxOf[a] ?? 10000) - (idxOf[b] ?? 10000)) || (firstSeen[a] - firstSeen[b])
@@ -3586,7 +3708,7 @@ function renderByDish(){
       const {isContinuation, band} = meta[i];
       const noQty = (r.qty===undefined || r.qty===null || r.qty==='' || isNaN(parseQty(r.qty)));
       let totalCell;
-      if (total!==null) totalCell = `<b>${fmtNum(total)} ${escapeHtml(String(r.unit||''))}</b>`;
+      if (total!==null) totalCell = `<b>${qN(total,r.unit)} ${escapeHtml(qU(total,r.unit))}</b>`;
       else if (isContinuation && noQty) totalCell = '<span class="contnote">uses batch above</span>';
       else totalCell = '<span class="needpax">set pax →</span>';
       html += `<tr class="job-band-${band}${!isContinuation?' job-start':''}">
@@ -3613,7 +3735,7 @@ function renderByDish(){
           const total = computeTotal(r);
           const cont = meta[i].isContinuation;
           const noQty = (r.qty===undefined || r.qty===null || r.qty==='' || isNaN(parseQty(r.qty)));
-          const totalTxt = total!==null ? `${fmtNum(total)} ${r.unit||''}` : (cont && noQty ? 'uses batch above' : '—');
+          const totalTxt = total!==null ? `${qN(total,r.unit)} ${qU(total,r.unit)}` : (cont && noQty ? 'uses batch above' : '—');
           return `<tr class="${!cont?'job-start':''}"><td class="${cont?'continuation-task':'task'}">${cont?'↳ ':''}${escapeHtml(r.task)}</td><td class="qty">${r.qty||'—'} ${r.unit||''}</td><td class="qty"><b>${totalTxt}</b></td><td class="pf-section">${r.section}</td><td class="pf-day">${r.day||'—'}</td></tr>`;
         }).join('')}
         </tbody></table>
@@ -3641,7 +3763,7 @@ function copyDish(encodedDish){
   text += `\n`;
   rows.forEach(r=>{
     const total = computeTotal(r);
-    text += `  [ ] ${r.task} — ${total!==null?fmtNum(total)+' '+(r.unit||''):'(set pax for total)'} [${r.qty||'—'} ${r.unit||''} per pax] · ${r.section} · ${r.day||'day not set'}\n`;
+    text += `  [ ] ${r.task} — ${total!==null?qN(total,r.unit)+' '+qU(total,r.unit):'(set pax for total)'} [${r.qty||'—'} ${r.unit||''} per pax] · ${r.section} · ${r.day||'day not set'}\n`;
   });
   navigator.clipboard.writeText(text).then(()=>{
     setStatus('Copied '+dish+' list to clipboard.', 'ok');
@@ -3721,7 +3843,7 @@ function renderByPriority(){
       </tr></thead><tbody>`;
       groups.forEach(g=>{
         const isMerged = g.rows.length>1;
-        const totalCell = g.hasTotal ? `<b>${fmtNum(g.total)}</b> ${g.unit?escapeHtml(String(g.unit)):''}` : '<span class="needpax">set pax</span>';
+        const totalCell = g.hasTotal ? `<b>${qN(g.total,g.unit)}</b> ${escapeHtml(qU(g.total,g.unit))}` : '<span class="needpax">set pax</span>';
         const dishList = g.dishes.map(dh=>escapeHtml(cleanDishName(dh))).join(', ');
         html += `<tr class="${isMerged?'job-band-1':''}">
           <td class="task">${escapeHtml(g.taskLabel)}${isMerged?`<span class="flagtag" style="background:var(--veg1-bg);color:var(--veg1);">×${g.rows.length} dishes</span>`:''} ${findSimilarBtn(g.taskLabel)}</td>
@@ -3749,7 +3871,7 @@ function renderByPriority(){
       const total = computeTotal(r);
       const {isContinuation, band} = meta[i];
       const noQty = (r.qty===undefined || r.qty===null || r.qty==='' || isNaN(parseQty(r.qty)));
-      const totalCell = total!==null ? `<b>${fmtNum(total)}</b> ${r.unit?escapeHtml(String(r.unit)):''}`
+      const totalCell = total!==null ? `<b>${qN(total,r.unit)}</b> ${escapeHtml(qU(total,r.unit))}`
         : (isContinuation && noQty ? '<span class="contnote">uses batch above</span>' : '—');
       const evDay = getEventDay(r.dish);
       html += `<tr class="job-band-${band}${!isContinuation?' job-start':''}">
@@ -3768,7 +3890,7 @@ function renderByPriority(){
     if (consolidateOn){
       printRowsHtml2 = groups.map(g=>{
         const isMerged = g.rows.length>1;
-        const totalCell = g.hasTotal ? `<b>${fmtNum(g.total)}</b> ${g.unit?escapeHtml(String(g.unit)):''}` : '<span class="needpax">set pax</span>';
+        const totalCell = g.hasTotal ? `<b>${qN(g.total,g.unit)}</b> ${escapeHtml(qU(g.total,g.unit))}` : '<span class="needpax">set pax</span>';
         const dishList = g.dishes.map(dh=>escapeHtml(cleanDishName(dh))).join(', ');
         return `<tr class="${isMerged?'job-band-1':''}">
           <td class="task">${escapeHtml(g.taskLabel)}${isMerged?`<span class="flagtag" style="background:var(--veg1-bg);color:var(--veg1);">×${g.rows.length} dishes</span>`:''}</td>
@@ -3785,7 +3907,7 @@ function renderByPriority(){
         const pax = paxByDish[r.dish];
         const {isContinuation, band} = pMeta[i];
         const noQty = (r.qty===undefined || r.qty===null || r.qty==='' || isNaN(parseQty(r.qty)));
-        const totalCell = total!==null ? `<b>${fmtNum(total)}</b> ${r.unit?escapeHtml(String(r.unit)):''}`
+        const totalCell = total!==null ? `<b>${qN(total,r.unit)}</b> ${escapeHtml(qU(total,r.unit))}`
           : (isContinuation && noQty ? '<span class="contnote">uses batch above</span>' : '—');
         const evDay = getEventDay(r.dish);
         return `<tr class="job-band-${band}${!isContinuation?' job-start':''}">
@@ -3830,7 +3952,7 @@ function copyPriority(label, key){
   if (consolidateOn){
     const groups = buildConsolidatedGroups(rowsForDay);
     groups.forEach(g=>{
-      const totalTxt = g.hasTotal ? `${fmtNum(g.total)} ${g.unit||''}` : '(set pax for total)';
+      const totalTxt = g.hasTotal ? `${qN(g.total,g.unit)} ${qU(g.total,g.unit)}` : '(set pax for total)';
       text += `  [ ] ${g.taskLabel} — ${totalTxt} · ${g.section} · ${leaderBySection[g.section] || 'lead TBC'}${g.rows.length>1 ? ' — for: '+g.dishes.map(cleanDishName).join(', ') : ''}\n`;
     });
   } else {
@@ -3841,7 +3963,7 @@ function copyPriority(label, key){
       text += cleanDishName(dish) + (evDay ? ` (event: ${evDay})` : '') + '\n';
       byDish[dish].forEach(r=>{
         const total = computeTotal(r);
-        text += `  [ ] ${r.task} — ${fmtNum(total)} ${total!==null?(r.unit||''):'(set pax for total)'} · ${r.section} · ${leaderBySection[r.section] || 'lead TBC'}\n`;
+        text += `  [ ] ${r.task} — ${total!==null?qN(total,r.unit)+' '+qU(total,r.unit):'— (set pax for total)'} · ${r.section} · ${leaderBySection[r.section] || 'lead TBC'}\n`;
       });
       text += '\n';
     });
@@ -3907,7 +4029,7 @@ function renderBySection(){
       </tr></thead><tbody>`;
       groups.forEach(g=>{
         const isMerged = g.rows.length>1;
-        const totalCell = g.hasTotal ? `<b>${fmtNum(g.total)}</b> ${g.unit?escapeHtml(String(g.unit)):''}` : '<span class="needpax">set pax</span>';
+        const totalCell = g.hasTotal ? `<b>${qN(g.total,g.unit)}</b> ${escapeHtml(qU(g.total,g.unit))}` : '<span class="needpax">set pax</span>';
         const dishList = g.dishes.map(d=>escapeHtml(cleanDishName(d))).join(', ');
         html += `<tr class="${isMerged?'job-band-1':''}">
           <td class="task">${escapeHtml(g.taskLabel)}${isMerged?`<span class="flagtag" style="background:var(--veg1-bg);color:var(--veg1);">×${g.rows.length} dishes</span>`:''} ${findSimilarBtn(g.taskLabel)}</td>
@@ -3936,7 +4058,7 @@ function renderBySection(){
       const pax = paxByDish[r.dish];
       const {isContinuation, band} = meta[idx];
       const noQty = (r.qty===undefined || r.qty===null || r.qty==='' || isNaN(parseQty(r.qty)));
-      const totalCell = total!==null ? `<b>${fmtNum(total)}</b> ${r.unit?escapeHtml(String(r.unit)):''}`
+      const totalCell = total!==null ? `<b>${qN(total,r.unit)}</b> ${escapeHtml(qU(total,r.unit))}`
         : (isContinuation && noQty ? '<span class="contnote">uses batch above</span>' : '—');
       html += `<tr class="job-band-${band}${!isContinuation?' job-start':''}">
         <td class="dish">${(idx>0 && rowsForSection[idx-1].dish===r.dish) ? '' : escapeHtml(cleanDishName(r.dish))}</td>
@@ -3960,7 +4082,7 @@ function renderBySection(){
     if (consolidateOn){
       printRowsHtml = groups.map(g=>{
         const isMerged = g.rows.length>1;
-        const totalCell = g.hasTotal ? `<b>${fmtNum(g.total)}</b> ${g.unit?escapeHtml(String(g.unit)):''}` : '<span class="needpax">set pax</span>';
+        const totalCell = g.hasTotal ? `<b>${qN(g.total,g.unit)}</b> ${escapeHtml(qU(g.total,g.unit))}` : '<span class="needpax">set pax</span>';
         const dishList = g.dishes.map(d=>escapeHtml(cleanDishName(d))).join(', ');
         return `<tr class="${isMerged?'job-band-1':''}">
           <td class="task">${escapeHtml(g.taskLabel)}${isMerged?`<span class="flagtag" style="background:var(--veg1-bg);color:var(--veg1);">×${g.rows.length} dishes</span>`:''}</td>
@@ -3976,7 +4098,7 @@ function renderBySection(){
         const pax = paxByDish[r.dish];
         const {isContinuation, band} = printMeta[i];
         const noQty = (r.qty===undefined || r.qty===null || r.qty==='' || isNaN(parseQty(r.qty)));
-        const totalCell = total!==null ? `<b>${fmtNum(total)}</b> ${r.unit?escapeHtml(String(r.unit)):''}`
+        const totalCell = total!==null ? `<b>${qN(total,r.unit)}</b> ${escapeHtml(qU(total,r.unit))}`
           : (isContinuation && noQty ? '<span class="contnote">uses batch above</span>' : '—');
         return `<tr class="job-band-${band}${!isContinuation?' job-start':''}">
           <td class="dish">${(i>0 && rowsForSection[i-1].dish===r.dish) ? '' : escapeHtml(cleanDishName(r.dish))}</td>
@@ -4076,12 +4198,14 @@ function cleanTaskLabel(task){
 function buildConsolidatedGroups(rows){
   const groups = {}; const order = [];
   rows.forEach(r=>{
-    const total = computeTotal(r);
-    const unitKey = (r.unit||'').toLowerCase().trim();
+    const rawTotal = computeTotal(r);
+    const based = toBaseQty(rawTotal, r.unit);
+    const total = rawTotal===null ? null : based.n;
+    const unitKey = based.key;
     const sig = taskSignature(r.task);
     const key = (total===null || !sig) ? 'single-'+order.length+'-'+Math.random() : sig+'|'+(r.day||'')+'|'+r.section+'|'+unitKey;
     if (!groups[key]){
-      groups[key] = {taskLabel: cleanTaskLabel(r.task), unit:r.unit, total:0, hasTotal:false,
+      groups[key] = {taskLabel: cleanTaskLabel(r.task), unit: rawTotal===null ? r.unit : based.u, total:0, hasTotal:false,
         day:r.day, section:r.section, rows:[], dishes:[]};
       order.push(key);
     }
@@ -4197,7 +4321,7 @@ function copySection(section){
   if (consolidateOn){
     const groups = buildConsolidatedGroups(rows);
     groups.forEach(g=>{
-      const totalTxt = g.hasTotal ? `${fmtNum(g.total)} ${g.unit||''}` : '(set pax for total)';
+      const totalTxt = g.hasTotal ? `${qN(g.total,g.unit)} ${qU(g.total,g.unit)}` : '(set pax for total)';
       text += `  [ ] ${g.taskLabel} — ${totalTxt} · ${g.day||'day not set'}${g.rows.length>1 ? ' — for: '+g.dishes.map(cleanDishName).join(', ') : ''}\n`;
     });
   } else {
@@ -4208,7 +4332,7 @@ function copySection(section){
       text += cleanDishName(dish) + (pax!==undefined ? ` (${pax} pax)` : ' (pax not set)') + '\n';
       byDish[dish].forEach(r=>{
         const total = computeTotal(r);
-        text += `  [ ] ${r.task} — ${fmtNum(total)} ${total!==null?(r.unit||''):'(set pax for total)'} [${r.qty||'—'} ${r.unit||''} per pax] · ${r.day||'day not set'}\n`;
+        text += `  [ ] ${r.task} — ${total!==null?qN(total,r.unit)+' '+qU(total,r.unit):'— (set pax for total)'} [${r.qty||'—'} ${r.unit||''} per pax] · ${r.day||'day not set'}\n`;
       });
       text += '\n';
     });
