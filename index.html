@@ -5911,7 +5911,7 @@ function showSurveyPrompt(){
   markSurveyPrompt('shown');   // remembered as soon as it appears, so it never shows again
   const t = document.createElement('div'); t.id = 'surveyToast'; t.className = 'survey-toast no-print';
   t.setAttribute('role', 'dialog'); t.setAttribute('aria-label', 'Help shape Prepline');
-  t.innerHTML = `<b>Help shape Prepline – 1-min survey</b>Six quick taps about how your kitchen does prep lists. Anonymous, no sign-in.
+  t.innerHTML = `<b>Help shape Prepline – 1-min survey</b>A few quick taps about how your kitchen does prep lists. Anonymous, no sign-in.
     <div class="st-row"><a class="st-go" href="${escapeHtml(surveyUrl('prompt'))}" target="_blank" rel="noopener">Take survey</a><button type="button" class="st-no">No thanks</button></div>`;
   t.querySelector('.st-go').addEventListener('click', ()=>{ markSurveyPrompt('taken'); t.remove(); });
   t.querySelector('.st-no').addEventListener('click', ()=>{ markSurveyPrompt('declined'); t.remove(); });
