@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
-<meta name="prepline-version" content="3.4.0">
+<meta name="prepline-version" content="3.4.1">
 <meta name="theme-color" content="#1C1E1B">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -937,6 +937,8 @@ var LICENSE_CONFIG = {
   @media (max-width:600px){ .shell-tabs{flex-wrap:wrap;} .shell-tab-btn{padding:8px 12px;} }
   /* survey link, one-time survey prompt, survey QR (v3.3.2) */
   .shell-brand{font-weight:600; color:inherit;}
+  .shell-brand{display:flex; align-items:center; gap:8px;} .shell-brand .ap-logo{width:22px; height:22px; border-radius:50%; flex:none;}
+  .ap-copy{margin-top:14px; font-size:11px; opacity:.75;}
   #preplistTab .masthead h1 .h1-tag{display:block; font-family:'Inter',sans-serif; font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); margin-top:2px;}
   #preplistTab .masthead h1 .h1-tag::before{content:none;}
   .shell-tab-btn.survey-link{text-decoration:none; display:inline-flex; align-items:center; font-weight:600; opacity:.92;}
@@ -1004,7 +1006,7 @@ var LICENSE_CONFIG = {
 <body>
 
 <div class="shell-masthead no-print">
-  <div class="shell-brand">Prepline</div>
+  <div class="shell-brand"><img class="ap-logo" src="icons/autoprod-logo-64.png" alt="" width="22" height="22">Prepline</div>
   <div class="shell-tabs">
     <button class="shell-tab-btn pro-cta" id="proUpgradeBtn" onclick="AutoprodLicence.openUpgrade()" type="button">★ Upgrade to Pro</button>
     <button class="shell-tab-btn" id="licenceKeyBtn" onclick="AutoprodLicence.openLicenceDialog()" type="button">Enter licence key</button>
@@ -1164,7 +1166,7 @@ var LICENSE_CONFIG = {
   <div id="resultsArea"></div>
 
   <footer class="no-print">
-    <div id="appVersion" style="font-family:'IBM Plex Mono',monospace; font-size:11px; margin-bottom:6px;">Prepline v3.4.0</div>
+    <div id="appVersion" style="font-family:'IBM Plex Mono',monospace; font-size:11px; margin-bottom:6px;">Prepline v3.4.1</div>
     <div class="footer-links"><a href="privacy.html" id="privacyLink" target="_blank" rel="noopener" onclick="return privacyLinkClick(event)">Privacy</a> · <a href="#" id="footerReportLink" onclick="openReport(); return false;">Report a problem</a></div>
     Two ways to use this: <b>One-time sort</b> works exactly like a normal upload-and-go tool — nothing is
     saved anywhere, close the tab and it's gone (print or export first). <b>Recipe database</b> instead saves
@@ -1183,6 +1185,7 @@ var LICENSE_CONFIG = {
     day assignments are saved automatically to this browser as you work, so a refresh or an accidental close won't
     lose them — this week's pax/date selections in Recipe database mode are the one exception and reset each week
     by design. Export or print if you want a copy outside this browser.
+    <div class="ap-copy">© 2026 Autoprod. All rights reserved.</div>
   </footer>
   <div class="print-only made-with-footer" id="madeWithFooter" hidden style="margin-top:18px; padding-top:8px; border-top:1px solid #ccc; font:11px 'Inter',sans-serif; color:#777; text-align:center;">Made with Prepline</div>
 </div>
